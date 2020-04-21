@@ -13,7 +13,7 @@
 
   <groupId>com.azure</groupId>
   <artifactId>azure-core-management</artifactId>
-  <version>1.0.0-beta.8</version> <!-- {x-version-update;com.azure:azure-core-management;current} -->
+  <version>1.0.0-SNAPSHOT</version> <!-- {x-version-update;com.azure:azure-core-management;current} -->
   <packaging>jar</packaging>
 
   <name>Microsoft Azure Management Java Core Library</name>
@@ -33,7 +33,27 @@
       <id>azure-java-build-docs</id>
       <url>${site.url}/site/${project.artifactId}</url>
     </site>
+
+    <snapshotRepository>
+      <id>azuresdkmaven</id>
+      <url>bs://azuresdkmaven.blob.core.windows.net/snapshot/m2</url>
+    </snapshotRepository>
+
+    <repository>
+      <id>azuresdkmaven</id>
+      <url>bs://azuresdkmaven.blob.core.windows.net/snapshot/m2</url>
+    </repository>
   </distributionManagement>
+
+  <build>
+    <extensions>
+      <extension>
+        <groupId>com.gkatzioura.maven.cloud</groupId>
+        <artifactId>azure-storage-wagon</artifactId>
+        <version>2.3</version>
+      </extension>
+    </extensions>
+  </build>
 
   <scm>
     <url>https://github.com/Azure/azure-sdk-for-java</url>
@@ -59,7 +79,7 @@
     <dependency>
       <groupId>com.azure</groupId>
       <artifactId>azure-core</artifactId>
-      <version>1.5.0-beta.1</version> <!-- {x-version-update;com.azure:azure-core;current} -->
+      <version>1.4.0</version> <!-- {x-version-update;com.azure:azure-core;current} -->
     </dependency>
 
     <dependency>
