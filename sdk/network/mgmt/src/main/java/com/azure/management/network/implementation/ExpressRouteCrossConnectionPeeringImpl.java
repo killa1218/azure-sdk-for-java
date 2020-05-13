@@ -68,8 +68,8 @@ class ExpressRouteCrossConnectionPeeringImpl
     }
 
     @Override
-    public ExpressRouteCrossConnectionPeeringImpl withPeerAsn(long peerAsn) {
-        inner().withPeerASN(peerAsn);
+    public ExpressRouteCrossConnectionPeeringImpl withPeerASN(long peerASN) {
+        inner().withPeerASN(peerASN);
         return this;
     }
 
@@ -120,7 +120,7 @@ class ExpressRouteCrossConnectionPeeringImpl
 
     @Override
     public boolean isInCreateMode() {
-        return this.inner().getId() == null;
+        return this.inner().id() == null;
     }
 
     @Override
@@ -140,7 +140,7 @@ class ExpressRouteCrossConnectionPeeringImpl
 
     @Override
     public String id() {
-        return inner().getId();
+        return inner().id();
     }
 
     @Override

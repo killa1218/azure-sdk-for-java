@@ -10,7 +10,6 @@ import com.azure.management.network.NetworkPeeringGatewayUse;
 import com.azure.management.network.VirtualNetworkPeeringState;
 import com.azure.management.network.models.VirtualNetworkPeeringInner;
 import com.azure.management.resources.fluentcore.arm.ResourceUtils;
-import com.azure.management.resources.fluentcore.arm.models.IndependentChild;
 import com.azure.management.resources.fluentcore.arm.models.implementation.IndependentChildImpl;
 import com.azure.management.resources.fluentcore.model.Indexable;
 import com.azure.management.resources.fluentcore.utils.Utils;
@@ -24,8 +23,7 @@ class NetworkPeeringImpl
         NetworkPeering, Network, VirtualNetworkPeeringInner, NetworkPeeringImpl, NetworkManager>
     implements NetworkPeering,
         NetworkPeering.Definition,
-        NetworkPeering.Update,
-        IndependentChild.DefinitionStages.WithParentResource<NetworkPeering, Network> {
+        NetworkPeering.Update {
 
     private NetworkImpl parent;
     private Network remoteNetwork;
@@ -69,7 +67,7 @@ class NetworkPeeringImpl
 
     @Override
     public String id() {
-        return this.inner().getId();
+        return this.inner().id();
     }
 
     @Override
@@ -87,7 +85,7 @@ class NetworkPeeringImpl
 
     @Override
     public String remoteNetworkId() {
-        return (this.inner().remoteVirtualNetwork() != null) ? this.inner().remoteVirtualNetwork().getId() : null;
+        return (this.inner().remoteVirtualNetwork() != null) ? this.inner().remoteVirtualNetwork().id() : null;
     }
 
     @Override
@@ -123,7 +121,7 @@ class NetworkPeeringImpl
 
     @Override
     public NetworkPeeringImpl withRemoteNetwork(String resourceId) {
-        SubResource networkRef = new SubResource().setId(resourceId);
+        SubResource networkRef = new SubResource().withId(resourceId);
         this.inner().withRemoteVirtualNetwork(networkRef);
         return this;
     }
@@ -265,7 +263,7 @@ class NetworkPeeringImpl
                     SubResource networkRef = inner.remoteVirtualNetwork();
                     if (localPeering.isSameSubscription()) {
                         // Update the remote network only if it is in the same subscription
-                        return localPeering.manager().networks().getByIdAsync(networkRef.getId());
+                        return localPeering.manager().networks().getByIdAsync(networkRef.id());
                     } else {
                         // Otherwise, skip this
                         return Mono.empty();

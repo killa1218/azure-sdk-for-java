@@ -52,6 +52,9 @@ import com.azure.management.resources.fluentcore.arm.ResourceUtils;
 import com.azure.management.resources.fluentcore.arm.models.Resource;
 import com.azure.management.resources.fluentcore.model.Creatable;
 import com.azure.management.resources.fluentcore.utils.Utils;
+import reactor.core.publisher.Flux;
+import reactor.core.publisher.Mono;
+
 import java.lang.reflect.InvocationTargetException;
 import java.util.ArrayList;
 import java.util.Collection;
@@ -63,8 +66,6 @@ import java.util.Map.Entry;
 import java.util.Set;
 import java.util.TreeMap;
 import java.util.TreeSet;
-import reactor.core.publisher.Flux;
-import reactor.core.publisher.Mono;
 
 /** Implementation of the ApplicationGateway interface. */
 class ApplicationGatewayImpl
@@ -123,7 +124,7 @@ class ApplicationGatewayImpl
             .manager()
             .inner()
             .applicationGateways()
-            .updateTagsAsync(resourceGroupName(), name(), inner().getTags());
+            .updateTagsAsync(resourceGroupName(), name(), inner().tags());
     }
 
     // Helpers
@@ -309,7 +310,7 @@ class ApplicationGatewayImpl
 
             // Clear deleted probe references
             ref = config.inner().probe();
-            if (ref != null && !this.probes().containsKey(ResourceUtils.nameFromResourceId(ref.getId()))) {
+            if (ref != null && !this.probes().containsKey(ResourceUtils.nameFromResourceId(ref.id()))) {
                 config.inner().withProbe(null);
             }
 
@@ -320,7 +321,7 @@ class ApplicationGatewayImpl
                 certRefs = new ArrayList<>(certRefs);
                 for (SubResource certRef : certRefs) {
                     if (certRef != null
-                        && !this.authCertificates.containsKey(ResourceUtils.nameFromResourceId(certRef.getId()))) {
+                        && !this.authCertificates.containsKey(ResourceUtils.nameFromResourceId(certRef.id()))) {
                         config.inner().authenticationCertificates().remove(certRef);
                     }
                 }
@@ -334,7 +335,7 @@ class ApplicationGatewayImpl
 
             // Clear deleted listener references
             ref = redirect.inner().targetListener();
-            if (ref != null && !this.listeners.containsKey(ResourceUtils.nameFromResourceId(ref.getId()))) {
+            if (ref != null && !this.listeners.containsKey(ResourceUtils.nameFromResourceId(ref.id()))) {
                 redirect.inner().withTargetListener(null);
             }
         }
@@ -346,19 +347,19 @@ class ApplicationGatewayImpl
 
             // Clear deleted frontend references
             ref = listener.inner().frontendIPConfiguration();
-            if (ref != null && !this.frontends().containsKey(ResourceUtils.nameFromResourceId(ref.getId()))) {
+            if (ref != null && !this.frontends().containsKey(ResourceUtils.nameFromResourceId(ref.id()))) {
                 listener.inner().withFrontendIPConfiguration(null);
             }
 
             // Clear deleted frontend port references
             ref = listener.inner().frontendPort();
-            if (ref != null && !this.frontendPorts().containsKey(ResourceUtils.nameFromResourceId(ref.getId()))) {
+            if (ref != null && !this.frontendPorts().containsKey(ResourceUtils.nameFromResourceId(ref.id()))) {
                 listener.inner().withFrontendPort(null);
             }
 
             // Clear deleted SSL certificate references
             ref = listener.inner().sslCertificate();
-            if (ref != null && !this.sslCertificates().containsKey(ResourceUtils.nameFromResourceId(ref.getId()))) {
+            if (ref != null && !this.sslCertificates().containsKey(ResourceUtils.nameFromResourceId(ref.id()))) {
                 listener.inner().withSslCertificate(null);
             }
         }
@@ -370,25 +371,25 @@ class ApplicationGatewayImpl
 
             // Clear deleted redirect configs
             ref = rule.inner().redirectConfiguration();
-            if (ref != null && !this.redirectConfigs.containsKey(ResourceUtils.nameFromResourceId(ref.getId()))) {
+            if (ref != null && !this.redirectConfigs.containsKey(ResourceUtils.nameFromResourceId(ref.id()))) {
                 rule.inner().withRedirectConfiguration(null);
             }
 
             // Clear deleted backends
             ref = rule.inner().backendAddressPool();
-            if (ref != null && !this.backends().containsKey(ResourceUtils.nameFromResourceId(ref.getId()))) {
+            if (ref != null && !this.backends().containsKey(ResourceUtils.nameFromResourceId(ref.id()))) {
                 rule.inner().withBackendAddressPool(null);
             }
 
             // Clear deleted backend HTTP configs
             ref = rule.inner().backendHttpSettings();
-            if (ref != null && !this.backendConfigs.containsKey(ResourceUtils.nameFromResourceId(ref.getId()))) {
+            if (ref != null && !this.backendConfigs.containsKey(ResourceUtils.nameFromResourceId(ref.id()))) {
                 rule.inner().withBackendHttpSettings(null);
             }
 
             // Clear deleted frontend HTTP listeners
             ref = rule.inner().httpListener();
-            if (ref != null && !this.listeners().containsKey(ResourceUtils.nameFromResourceId(ref.getId()))) {
+            if (ref != null && !this.listeners().containsKey(ResourceUtils.nameFromResourceId(ref.id()))) {
                 rule.inner().withHttpListener(null);
             }
         }
@@ -405,7 +406,7 @@ class ApplicationGatewayImpl
         }
 
         // Return backend reference
-        return new SubResource().setId(this.futureResourceId() + "/backendAddressPools/" + backend.name());
+        return new SubResource().withId(this.futureResourceId() + "/backendAddressPools/" + backend.name());
     }
 
     protected ApplicationGatewayBackendImpl ensureUniqueBackend() {
@@ -578,31 +579,37 @@ class ApplicationGatewayImpl
      * @param byName object found by name
      * @param byPort object found by port
      * @param name the desired name of the object
-     * @return true if already found, false if ok to create, null if conflict
+     * @return CreationState
      */
-    <T> Boolean needToCreate(T byName, T byPort, String name) {
+    <T> CreationState needToCreate(T byName, T byPort, String name) {
         if (byName != null && byPort != null) {
             // If objects with this name and/or port already exist...
             if (byName == byPort) {
                 // ...and it is the same object, then do nothing
-                return false;
+                return CreationState.Found;
             } else {
                 // ...but if they are inconsistent, then fail fast
-                return null;
+                return CreationState.InvalidState;
             }
         } else if (byPort != null) {
             // If no object with the requested name, but the port number is found...
             if (name == null) {
                 // ...and no name is requested, then do nothing, because the object already exists
-                return false;
+                return CreationState.Found;
             } else {
                 // ...but if a clashing name is requested, then fail fast
-                return null;
+                return CreationState.InvalidState;
             }
         } else {
             // Ok to create the object
-            return true;
+            return CreationState.NeedToCreate;
         }
+    }
+
+    enum CreationState {
+        Found,
+        NeedToCreate,
+        InvalidState,
     }
 
     String futureResourceId() {
@@ -912,7 +919,7 @@ class ApplicationGatewayImpl
                 this.urlPathMaps,
                 ApplicationGatewayUrlPathMapInner.class,
                 ApplicationGatewayUrlPathMapImpl.class);
-        SubResource ref = new SubResource().setId(futureResourceId() + "/urlPathMaps/" + name);
+        SubResource ref = new SubResource().withId(futureResourceId() + "/urlPathMaps/" + name);
         // create corresponding request routing rule
         ApplicationGatewayRequestRoutingRuleInner inner =
             new ApplicationGatewayRequestRoutingRuleInner()
@@ -937,7 +944,7 @@ class ApplicationGatewayImpl
                 this.backendConfigs,
                 ApplicationGatewayBackendHttpSettings.class,
                 ApplicationGatewayBackendHttpConfigurationImpl.class);
-        if (config.inner().getId() == null) {
+        if (config.inner().id() == null) {
             return config.withPort(80); // Default port
         } else {
             return config;
@@ -1031,8 +1038,8 @@ class ApplicationGatewayImpl
             }
         }
 
-        Boolean needToCreate = this.needToCreate(frontendPortByName, frontendPortByNumber, name);
-        if (Boolean.TRUE.equals(needToCreate)) {
+        CreationState needToCreate = this.needToCreate(frontendPortByName, frontendPortByNumber, name);
+        if (needToCreate == CreationState.NeedToCreate) {
             // If no conflict, create a new port
             if (name == null) {
                 // No name specified, so auto-name it
@@ -1042,7 +1049,7 @@ class ApplicationGatewayImpl
             frontendPortByName = new ApplicationGatewayFrontendPort().withName(name).withPort(portNumber);
             frontendPorts.add(frontendPortByName);
             return this;
-        } else if (Boolean.FALSE.equals(needToCreate)) {
+        } else if (needToCreate == CreationState.Found) {
             // If found matching port, then nothing needs to happen
             return this;
         } else {
@@ -1497,7 +1504,7 @@ class ApplicationGatewayImpl
         if (subnetRef == null) {
             return null;
         } else {
-            return ResourceUtils.parentResourceIdFromResourceId(subnetRef.getId());
+            return ResourceUtils.parentResourceIdFromResourceId(subnetRef.id());
         }
     }
 
@@ -1507,7 +1514,7 @@ class ApplicationGatewayImpl
         if (subnetRef == null) {
             return null;
         } else {
-            return ResourceUtils.nameFromResourceId(subnetRef.getId());
+            return ResourceUtils.nameFromResourceId(subnetRef.id());
         }
     }
 

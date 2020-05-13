@@ -23,6 +23,7 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Set;
 import reactor.core.publisher.Mono;
 
@@ -68,7 +69,7 @@ class PublicIPAddressImpl
 
     @Override
     public PublicIPAddressImpl withLeafDomainLabel(String dnsName) {
-        this.inner().dnsSettings().withDomainNameLabel((dnsName == null) ? null : dnsName.toLowerCase());
+        this.inner().dnsSettings().withDomainNameLabel((dnsName == null) ? null : dnsName.toLowerCase(Locale.ROOT));
         return this;
     }
 
@@ -103,7 +104,7 @@ class PublicIPAddressImpl
 
     @Override
     public PublicIPAddressImpl withReverseFqdn(String reverseFqdn) {
-        this.inner().dnsSettings().withReverseFqdn(reverseFqdn != null ? reverseFqdn.toLowerCase() : null);
+        this.inner().dnsSettings().withReverseFqdn(reverseFqdn != null ? reverseFqdn.toLowerCase(Locale.ROOT) : null);
         return this;
     }
 
@@ -187,7 +188,7 @@ class PublicIPAddressImpl
         if (ipConfig == null || resourceType == null) {
             return false;
         } else {
-            final String refId = this.inner().ipConfiguration().getId();
+            final String refId = this.inner().ipConfiguration().id();
             final String resourceType2 = ResourceUtils.resourceTypeFromResourceId(refId);
             return resourceType.equalsIgnoreCase(resourceType2);
         }
@@ -201,7 +202,7 @@ class PublicIPAddressImpl
     @Override
     public LoadBalancerPublicFrontend getAssignedLoadBalancerFrontend() {
         if (this.hasAssignedLoadBalancer()) {
-            final String refId = this.inner().ipConfiguration().getId();
+            final String refId = this.inner().ipConfiguration().id();
             final String loadBalancerId = ResourceUtils.parentResourceIdFromResourceId(refId);
             final LoadBalancer lb = this.myManager.loadBalancers().getById(loadBalancerId);
             final String frontendName = ResourceUtils.nameFromResourceId(refId);
@@ -240,7 +241,7 @@ class PublicIPAddressImpl
     @Override
     public NicIPConfiguration getAssignedNetworkInterfaceIPConfiguration() {
         if (this.hasAssignedNetworkInterface()) {
-            final String refId = this.inner().ipConfiguration().getId();
+            final String refId = this.inner().ipConfiguration().id();
             final String parentId = ResourceUtils.parentResourceIdFromResourceId(refId);
             final NetworkInterface nic = this.myManager.networkInterfaces().getById(parentId);
             final String childName = ResourceUtils.nameFromResourceId(refId);
@@ -266,7 +267,7 @@ class PublicIPAddressImpl
             .manager()
             .inner()
             .publicIPAddresses()
-            .updateTagsAsync(resourceGroupName(), name(), inner().getTags())
+            .updateTagsAsync(resourceGroupName(), name(), inner().tags())
             .flatMap(
                 inner -> {
                     setInner(inner);

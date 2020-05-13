@@ -23,6 +23,7 @@ import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.TreeMap;
@@ -62,12 +63,12 @@ class SubnetImpl extends ChildResourceImpl<SubnetInner, NetworkImpl, Network>
 
     @Override
     public String networkSecurityGroupId() {
-        return (this.inner().networkSecurityGroup() != null) ? this.inner().networkSecurityGroup().getId() : null;
+        return (this.inner().networkSecurityGroup() != null) ? this.inner().networkSecurityGroup().id() : null;
     }
 
     @Override
     public String routeTableId() {
-        return (this.inner().routeTable() != null) ? this.inner().routeTable().getId() : null;
+        return (this.inner().routeTable() != null) ? this.inner().routeTable().id() : null;
     }
 
     @Override
@@ -215,10 +216,10 @@ class SubnetImpl extends ChildResourceImpl<SubnetInner, NetworkImpl, Network>
         }
 
         for (IPConfigurationInner ipConfigRef : ipConfigRefs) {
-            String nicID = ResourceUtils.parentResourceIdFromResourceId(ipConfigRef.getId());
-            String ipConfigName = ResourceUtils.nameFromResourceId(ipConfigRef.getId());
+            String nicID = ResourceUtils.parentResourceIdFromResourceId(ipConfigRef.id());
+            String ipConfigName = ResourceUtils.nameFromResourceId(ipConfigRef.id());
             // Check if NIC already cached
-            NetworkInterface nic = nics.get(nicID.toLowerCase());
+            NetworkInterface nic = nics.get(nicID.toLowerCase(Locale.ROOT));
             if (nic == null) {
                 //  NIC not previously found, so ask Azure for it
                 nic = this.parent().manager().networkInterfaces().getById(nicID);
@@ -230,7 +231,7 @@ class SubnetImpl extends ChildResourceImpl<SubnetInner, NetworkImpl, Network>
             }
 
             // Cache the NIC
-            nics.put(nic.id().toLowerCase(), nic);
+            nics.put(nic.id().toLowerCase(Locale.ROOT), nic);
 
             // Get the IP config
             NicIPConfiguration ipConfig = nic.ipConfigurations().get(ipConfigName);
