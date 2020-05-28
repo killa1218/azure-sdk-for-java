@@ -9,28 +9,31 @@ import com.azure.core.http.policy.HttpPipelinePolicy;
 import com.azure.core.http.policy.RetryPolicy;
 import com.azure.core.test.TestBase;
 import com.azure.core.util.Configuration;
-import com.azure.search.documents.models.CorsOptions;
-import com.azure.search.documents.models.DataChangeDetectionPolicy;
-import com.azure.search.documents.models.DataDeletionDetectionPolicy;
-import com.azure.search.documents.models.DistanceScoringFunction;
-import com.azure.search.documents.models.DistanceScoringParameters;
-import com.azure.search.documents.models.FreshnessScoringFunction;
-import com.azure.search.documents.models.FreshnessScoringParameters;
-import com.azure.search.documents.models.LexicalAnalyzerName;
-import com.azure.search.documents.models.MagnitudeScoringFunction;
-import com.azure.search.documents.models.MagnitudeScoringParameters;
-import com.azure.search.documents.models.ScoringFunctionAggregation;
-import com.azure.search.documents.models.ScoringFunctionInterpolation;
-import com.azure.search.documents.models.ScoringProfile;
-import com.azure.search.documents.models.SearchField;
-import com.azure.search.documents.models.SearchFieldDataType;
-import com.azure.search.documents.models.SearchIndex;
-import com.azure.search.documents.models.SearchIndexerDataSource;
-import com.azure.search.documents.models.SoftDeleteColumnDeletionDetectionPolicy;
-import com.azure.search.documents.models.Suggester;
-import com.azure.search.documents.models.TagScoringFunction;
-import com.azure.search.documents.models.TagScoringParameters;
-import com.azure.search.documents.models.TextWeights;
+import com.azure.search.documents.indexes.SearchIndexClientBuilder;
+import com.azure.search.documents.indexes.SearchIndexerClientBuilder;
+import com.azure.search.documents.indexes.SearchIndexerDataSources;
+import com.azure.search.documents.indexes.models.CorsOptions;
+import com.azure.search.documents.indexes.models.DataChangeDetectionPolicy;
+import com.azure.search.documents.indexes.models.DataDeletionDetectionPolicy;
+import com.azure.search.documents.indexes.models.DistanceScoringFunction;
+import com.azure.search.documents.indexes.models.DistanceScoringParameters;
+import com.azure.search.documents.indexes.models.FreshnessScoringFunction;
+import com.azure.search.documents.indexes.models.FreshnessScoringParameters;
+import com.azure.search.documents.indexes.models.LexicalAnalyzerName;
+import com.azure.search.documents.indexes.models.MagnitudeScoringFunction;
+import com.azure.search.documents.indexes.models.MagnitudeScoringParameters;
+import com.azure.search.documents.indexes.models.ScoringFunctionAggregation;
+import com.azure.search.documents.indexes.models.ScoringFunctionInterpolation;
+import com.azure.search.documents.indexes.models.ScoringProfile;
+import com.azure.search.documents.indexes.models.SearchField;
+import com.azure.search.documents.indexes.models.SearchFieldDataType;
+import com.azure.search.documents.indexes.models.SearchIndex;
+import com.azure.search.documents.indexes.models.SearchIndexerDataSource;
+import com.azure.search.documents.indexes.models.SoftDeleteColumnDeletionDetectionPolicy;
+import com.azure.search.documents.indexes.models.Suggester;
+import com.azure.search.documents.indexes.models.TagScoringFunction;
+import com.azure.search.documents.indexes.models.TagScoringParameters;
+import com.azure.search.documents.indexes.models.TextWeights;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
 import java.io.IOException;
@@ -90,13 +93,13 @@ public abstract class SearchTestBase extends TestBase {
 
     protected String setupIndex(SearchIndex index) {
         index.setName(testResourceNamer.randomName(index.getName(), 64));
-        getSearchServiceClientBuilder().buildClient().createOrUpdateIndex(index);
+        getSearchIndexClientBuilder().buildClient().createOrUpdateIndex(index);
 
         return index.getName();
     }
 
-    protected SearchServiceClientBuilder getSearchServiceClientBuilder(HttpPipelinePolicy... policies) {
-        SearchServiceClientBuilder builder = new SearchServiceClientBuilder()
+    protected SearchIndexClientBuilder getSearchIndexClientBuilder(HttpPipelinePolicy... policies) {
+        SearchIndexClientBuilder builder = new SearchIndexClientBuilder()
             .endpoint(ENDPOINT);
 
         if (interceptorManager.isPlaybackMode()) {
@@ -117,7 +120,29 @@ public abstract class SearchTestBase extends TestBase {
 
     }
 
-    private static void addPolicies(SearchServiceClientBuilder builder, HttpPipelinePolicy... policies) {
+    protected SearchIndexerClientBuilder getSearchIndexerClientBuilder(HttpPipelinePolicy... policies) {
+        SearchIndexerClientBuilder builder = new SearchIndexerClientBuilder()
+            .endpoint(ENDPOINT);
+
+        if (interceptorManager.isPlaybackMode()) {
+            builder.httpClient(interceptorManager.getPlaybackClient());
+            addPolicies(builder, policies);
+            return builder;
+        }
+
+        addPolicies(builder, policies);
+        builder.credential(new AzureKeyCredential(API_KEY))
+            .retryPolicy(new RetryPolicy(new ExponentialBackoff(3, Duration.ofSeconds(10), Duration.ofSeconds(30))));
+
+        if (!interceptorManager.isLiveMode()) {
+            builder.addPolicy(interceptorManager.getRecordPolicy());
+        }
+
+        return builder;
+
+    }
+
+    private static void addPolicies(SearchIndexClientBuilder builder, HttpPipelinePolicy... policies) {
         if (policies == null) {
             return;
         }
@@ -127,8 +152,18 @@ public abstract class SearchTestBase extends TestBase {
         }
     }
 
-    protected SearchIndexClientBuilder getSearchIndexClientBuilder(String indexName) {
-        SearchIndexClientBuilder builder = new SearchIndexClientBuilder()
+    private static void addPolicies(SearchIndexerClientBuilder builder, HttpPipelinePolicy... policies) {
+        if (policies == null) {
+            return;
+        }
+
+        for (HttpPipelinePolicy policy : policies) {
+            builder.addPolicy(policy);
+        }
+    }
+
+    protected SearchClientBuilder getSearchIndexClientBuilder(String indexName) {
+        SearchClientBuilder builder = new SearchClientBuilder()
             .endpoint(ENDPOINT)
             .indexName(indexName);
 
