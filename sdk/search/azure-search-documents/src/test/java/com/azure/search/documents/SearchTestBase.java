@@ -28,9 +28,9 @@ import com.azure.search.documents.indexes.models.ScoringProfile;
 import com.azure.search.documents.indexes.models.SearchField;
 import com.azure.search.documents.indexes.models.SearchFieldDataType;
 import com.azure.search.documents.indexes.models.SearchIndex;
-import com.azure.search.documents.indexes.models.SearchIndexerDataSource;
+import com.azure.search.documents.indexes.models.SearchIndexerDataSourceConnection;
 import com.azure.search.documents.indexes.models.SoftDeleteColumnDeletionDetectionPolicy;
-import com.azure.search.documents.indexes.models.Suggester;
+import com.azure.search.documents.indexes.models.SearchSuggester;
 import com.azure.search.documents.indexes.models.TagScoringFunction;
 import com.azure.search.documents.indexes.models.TagScoringParameters;
 import com.azure.search.documents.indexes.models.TextWeights;
@@ -56,7 +56,6 @@ import static com.azure.search.documents.TestHelpers.SQL_DATASOURCE_NAME;
  */
 public abstract class SearchTestBase extends TestBase {
     private static final String HOTELS_TESTS_INDEX_DATA_JSON = "HotelsTestsIndexData.json";
-
     protected static final String ENDPOINT = Configuration.getGlobalConfiguration()
         .get("SEARCH_SERVICE_ENDPOINT", "https://playback.search.windows.net");
 
@@ -101,7 +100,7 @@ public abstract class SearchTestBase extends TestBase {
     protected SearchIndexClientBuilder getSearchIndexClientBuilder(HttpPipelinePolicy... policies) {
         SearchIndexClientBuilder builder = new SearchIndexClientBuilder()
             .endpoint(ENDPOINT);
-
+        builder.credential(new AzureKeyCredential(API_KEY));
         if (interceptorManager.isPlaybackMode()) {
             builder.httpClient(interceptorManager.getPlaybackClient());
             addPolicies(builder, policies);
@@ -109,8 +108,8 @@ public abstract class SearchTestBase extends TestBase {
         }
 
         addPolicies(builder, policies);
-        builder.credential(new AzureKeyCredential(API_KEY))
-            .retryPolicy(new RetryPolicy(new ExponentialBackoff(3, Duration.ofSeconds(10), Duration.ofSeconds(30))));
+
+        builder.retryPolicy(new RetryPolicy(new ExponentialBackoff(3, Duration.ofSeconds(10), Duration.ofSeconds(30))));
 
         if (!interceptorManager.isLiveMode()) {
             builder.addPolicy(interceptorManager.getRecordPolicy());
@@ -123,7 +122,7 @@ public abstract class SearchTestBase extends TestBase {
     protected SearchIndexerClientBuilder getSearchIndexerClientBuilder(HttpPipelinePolicy... policies) {
         SearchIndexerClientBuilder builder = new SearchIndexerClientBuilder()
             .endpoint(ENDPOINT);
-
+        builder.credential(new AzureKeyCredential(API_KEY));
         if (interceptorManager.isPlaybackMode()) {
             builder.httpClient(interceptorManager.getPlaybackClient());
             addPolicies(builder, policies);
@@ -131,8 +130,8 @@ public abstract class SearchTestBase extends TestBase {
         }
 
         addPolicies(builder, policies);
-        builder.credential(new AzureKeyCredential(API_KEY))
-            .retryPolicy(new RetryPolicy(new ExponentialBackoff(3, Duration.ofSeconds(10), Duration.ofSeconds(30))));
+
+        builder.retryPolicy(new RetryPolicy(new ExponentialBackoff(3, Duration.ofSeconds(10), Duration.ofSeconds(30))));
 
         if (!interceptorManager.isLiveMode()) {
             builder.addPolicy(interceptorManager.getRecordPolicy());
@@ -167,12 +166,12 @@ public abstract class SearchTestBase extends TestBase {
             .endpoint(ENDPOINT)
             .indexName(indexName);
 
+        builder.credential(new AzureKeyCredential(API_KEY));
         if (interceptorManager.isPlaybackMode()) {
             return builder.httpClient(interceptorManager.getPlaybackClient());
         }
 
-        builder.credential(new AzureKeyCredential(API_KEY))
-            .retryPolicy(new RetryPolicy(new ExponentialBackoff(3, Duration.ofSeconds(10), Duration.ofSeconds(30))));
+        builder.retryPolicy(new RetryPolicy(new ExponentialBackoff(3, Duration.ofSeconds(10), Duration.ofSeconds(30))));
 
         if (!interceptorManager.isLiveMode()) {
             builder.addPolicy(interceptorManager.getRecordPolicy());
@@ -207,20 +206,20 @@ public abstract class SearchTestBase extends TestBase {
                     .setName("Description")
                     .setType(SearchFieldDataType.STRING)
                     .setSearchable(Boolean.TRUE)
-                    .setAnalyzer(LexicalAnalyzerName.EN_LUCENE)
+                    .setAnalyzerName(LexicalAnalyzerName.EN_LUCENE)
                     .setHidden(Boolean.FALSE),
                 new SearchField()
                     .setName("DescriptionFr")
                     .setType(SearchFieldDataType.STRING)
                     .setSearchable(Boolean.TRUE)
-                    .setAnalyzer(LexicalAnalyzerName.FR_LUCENE)
+                    .setAnalyzerName(LexicalAnalyzerName.FR_LUCENE)
                     .setHidden(Boolean.FALSE),
                 new SearchField()
                     .setName("Description_Custom")
                     .setType(SearchFieldDataType.STRING)
                     .setSearchable(Boolean.TRUE)
-                    .setSearchAnalyzer(LexicalAnalyzerName.STOP)
-                    .setIndexAnalyzer(LexicalAnalyzerName.STOP)
+                    .setSearchAnalyzerName(LexicalAnalyzerName.STOP)
+                    .setIndexAnalyzerName(LexicalAnalyzerName.STOP)
                     .setHidden(Boolean.FALSE),
                 new SearchField()
                     .setName("Category")
@@ -322,12 +321,12 @@ public abstract class SearchTestBase extends TestBase {
                             .setName("Description")
                             .setType(SearchFieldDataType.STRING)
                             .setSearchable(Boolean.TRUE)
-                            .setAnalyzer(LexicalAnalyzerName.EN_LUCENE),
+                            .setAnalyzerName(LexicalAnalyzerName.EN_LUCENE),
                         new SearchField()
                             .setName("DescriptionFr")
                             .setType(SearchFieldDataType.STRING)
                             .setSearchable(Boolean.TRUE)
-                            .setAnalyzer(LexicalAnalyzerName.FR_LUCENE)
+                            .setAnalyzerName(LexicalAnalyzerName.FR_LUCENE)
                             .setHidden(Boolean.FALSE),
                         new SearchField()
                             .setName("Type")
@@ -452,23 +451,23 @@ public abstract class SearchTestBase extends TestBase {
             .setCorsOptions(new CorsOptions()
                 .setAllowedOrigins("http://tempuri.org", "http://localhost:80")
                 .setMaxAgeInSeconds(60L))
-            .setSuggesters(Collections.singletonList(new Suggester()
+            .setSearchSuggesters(Collections.singletonList(new SearchSuggester()
                 .setName("FancySuggester")
                 .setSourceFields(Collections.singletonList("HotelName"))));
     }
 
-    protected SearchIndexerDataSource createTestSqlDataSourceObject() {
+    protected SearchIndexerDataSourceConnection createTestSqlDataSourceObject() {
         return createTestSqlDataSourceObject(null, null);
     }
 
-    protected SearchIndexerDataSource createTestSqlDataSourceObject(
+    protected SearchIndexerDataSourceConnection createTestSqlDataSourceObject(
         DataDeletionDetectionPolicy dataDeletionDetectionPolicy, DataChangeDetectionPolicy dataChangeDetectionPolicy) {
         return SearchIndexerDataSources.createFromAzureSql(testResourceNamer.randomName(SQL_DATASOURCE_NAME, 32),
             AZURE_SQL_CONN_STRING_READONLY_PLAYGROUND, "GeoNamesRI", FAKE_DESCRIPTION, dataChangeDetectionPolicy,
             dataDeletionDetectionPolicy);
     }
 
-    protected SearchIndexerDataSource createBlobDataSource() {
+    protected SearchIndexerDataSourceConnection createBlobDataSource() {
         String storageConnectionString = Configuration.getGlobalConfiguration()
             .get("SEARCH_STORAGE_CONNECTION_STRING", "connectionString");
         String blobContainerName = Configuration.getGlobalConfiguration()
