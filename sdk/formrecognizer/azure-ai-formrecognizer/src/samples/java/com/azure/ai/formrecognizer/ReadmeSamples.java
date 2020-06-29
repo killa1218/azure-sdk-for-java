@@ -6,7 +6,6 @@ package com.azure.ai.formrecognizer;
 import com.azure.ai.formrecognizer.models.AccountProperties;
 import com.azure.ai.formrecognizer.models.CustomFormModel;
 import com.azure.ai.formrecognizer.models.CustomFormModelInfo;
-import com.azure.ai.formrecognizer.models.ErrorResponseException;
 import com.azure.ai.formrecognizer.models.FieldValueType;
 import com.azure.ai.formrecognizer.models.FormField;
 import com.azure.ai.formrecognizer.models.FormPage;
@@ -17,6 +16,7 @@ import com.azure.ai.formrecognizer.training.FormTrainingClient;
 import com.azure.ai.formrecognizer.training.FormTrainingClientBuilder;
 import com.azure.core.credential.AzureKeyCredential;
 import com.azure.core.credential.TokenCredential;
+import com.azure.core.exception.HttpResponseException;
 import com.azure.core.http.rest.PagedIterable;
 import com.azure.core.util.polling.SyncPoller;
 import com.azure.identity.DefaultAzureCredentialBuilder;
@@ -80,11 +80,11 @@ public class ReadmeSamples {
 
         for (int i = 0; i < recognizedForms.size(); i++) {
             RecognizedForm form = recognizedForms.get(i);
-            System.out.printf("----------- Recognized Form %s%n-----------", i);
+            System.out.printf("----------- Recognized Form %d-----------%n", i);
             System.out.printf("Form type: %s%n", form.getFormType());
             form.getFields().forEach((label, formField) -> {
-                System.out.printf("Field %s has value %s with confidence score of %d.%n", label,
-                    formField.getFieldValue(),
+                System.out.printf("Field %s has value %s with confidence score of %f.%n", label,
+                    formField.getValueText().getText(),
                     formField.getConfidence());
             });
             System.out.print("-----------------------------------");
@@ -100,9 +100,9 @@ public class ReadmeSamples {
 
         for (int i = 0; i < contentPageResults.size(); i++) {
             FormPage formPage = contentPageResults.get(i);
-            System.out.printf("----Recognizing content for page %s%n----", i);
+            System.out.printf("----Recognizing content for page %d----%n", i);
             // Table information
-            System.out.printf("Has width: %d and height: %d, measured with unit: %s.%n", formPage.getWidth(),
+            System.out.printf("Has width: %f and height: %f, measured with unit: %s.%n", formPage.getWidth(),
                 formPage.getHeight(),
                 formPage.getUnit());
             formPage.getTables().forEach(formTable -> {
@@ -126,7 +126,7 @@ public class ReadmeSamples {
         for (int i = 0; i < receiptPageResults.size(); i++) {
             RecognizedReceipt recognizedReceipt = receiptPageResults.get(i);
             Map<String, FormField> recognizedFields = recognizedReceipt.getRecognizedForm().getFields();
-            System.out.printf("----------- Recognized Receipt page %s -----------%n", i);
+            System.out.printf("----------- Recognized Receipt page %d -----------%n", i);
             FormField merchantNameField = recognizedFields.get("MerchantName");
             if (merchantNameField.getFieldValue().getType() == FieldValueType.STRING) {
                 System.out.printf("Merchant Name: %s, confidence: %.2f%n",
@@ -155,7 +155,7 @@ public class ReadmeSamples {
                             }
                             if (key.equals("Quantity")) {
                                 if (formField.getFieldValue().getType() == FieldValueType.INTEGER) {
-                                    System.out.printf("Quantity: %s, confidence: %.2f%n",
+                                    System.out.printf("Quantity: %d, confidence: %.2f%n",
                                         formField.getFieldValue().asInteger(), formField.getConfidence());
                                 }
                             }
@@ -184,7 +184,7 @@ public class ReadmeSamples {
         // Since the given training documents are unlabeled, we still group them but they do not have a label.
         customFormModel.getSubmodels().forEach(customFormSubmodel -> {
             // Since the training data is unlabeled, we are unable to return the accuracy of this model
-            customFormSubmodel.getFieldMap().forEach((field, customFormModelField) ->
+            customFormSubmodel.getFields().forEach((field, customFormModelField) ->
                 System.out.printf("Field: %s Field Label: %s%n",
                     field, customFormModelField.getLabel()));
         });
@@ -194,7 +194,7 @@ public class ReadmeSamples {
         AtomicReference<String> modelId = new AtomicReference<>();
         // First, we see how many custom models we have, and what our limit is
         AccountProperties accountProperties = formTrainingClient.getAccountProperties();
-        System.out.printf("The account has %s custom models, and we can have at most %s custom models",
+        System.out.printf("The account has %d custom models, and we can have at most %d custom models",
             accountProperties.getCustomModelCount(), accountProperties.getCustomModelLimit());
 
         // Next, we get a paged list of all of our custom models
@@ -210,11 +210,11 @@ public class ReadmeSamples {
             System.out.printf("Updated on: %s%n", customModel.getCompletedOn());
             customModel.getSubmodels().forEach(customFormSubmodel -> {
                 System.out.printf("Custom Model Form type: %s%n", customFormSubmodel.getFormType());
-                System.out.printf("Custom Model Accuracy: %d%n", customFormSubmodel.getAccuracy());
-                if (customFormSubmodel.getFieldMap() != null) {
-                    customFormSubmodel.getFieldMap().forEach((fieldText, customFormModelField) -> {
+                System.out.printf("Custom Model Accuracy: %f%n", customFormSubmodel.getAccuracy());
+                if (customFormSubmodel.getFields() != null) {
+                    customFormSubmodel.getFields().forEach((fieldText, customFormModelField) -> {
                         System.out.printf("Field Text: %s%n", fieldText);
-                        System.out.printf("Field Accuracy: %d%n", customFormModelField.getAccuracy());
+                        System.out.printf("Field Accuracy: %f%n", customFormModelField.getAccuracy());
                     });
                 }
             });
@@ -229,7 +229,7 @@ public class ReadmeSamples {
     public void handlingException() {
         try {
             formRecognizerClient.beginRecognizeContentFromUrl("invalidSourceUrl");
-        } catch (ErrorResponseException e) {
+        } catch (HttpResponseException e) {
             System.out.println(e.getMessage());
         }
     }

@@ -87,7 +87,7 @@ public class VirtualMachineScaleSetOperationsTests extends ComputeManagementTest
     public void canUpdateVirtualMachineScaleSetWithExtensionProtectedSettings() throws Exception {
         final String vmssName = generateRandomResourceName("vmss", 10);
         final String uname = "jvuser";
-        final String password = "123OData!@#123";
+        final String password = password();
 
         ResourceGroup resourceGroup = this.resourceManager.resourceGroups().define(rgName).withRegion(region).create();
 
@@ -224,7 +224,7 @@ public class VirtualMachineScaleSetOperationsTests extends ComputeManagementTest
     public void canCreateVirtualMachineScaleSetWithCustomScriptExtension() throws Exception {
         final String vmssName = generateRandomResourceName("vmss", 10);
         final String uname = "jvuser";
-        final String password = "123OData!@#123";
+        final String password = password();
         final String apacheInstallScript =
             "https://raw.githubusercontent.com/Azure/azure-sdk-for-java/blob/master/sdk/compute/mgmt/src/test/resources/install_apache.sh";
         final String installCommand = "bash install_apache.sh Abc.123x(";
@@ -354,7 +354,7 @@ public class VirtualMachineScaleSetOperationsTests extends ComputeManagementTest
                 .withoutPrimaryInternalLoadBalancer()
                 .withPopularLinuxImage(KnownLinuxVirtualMachineImage.UBUNTU_SERVER_16_04_LTS)
                 .withRootUsername("jvuser")
-                .withRootPassword("123OData!@#123")
+                .withRootPassword(password())
                 .withVirtualMachinePublicIp(vmssVmDnsLabel)
                 .withExistingApplicationSecurityGroup(asg)
                 .create();
@@ -498,7 +498,7 @@ public class VirtualMachineScaleSetOperationsTests extends ComputeManagementTest
                 .withoutPrimaryInternalLoadBalancer()
                 .withPopularLinuxImage(KnownLinuxVirtualMachineImage.UBUNTU_SERVER_16_04_LTS)
                 .withRootUsername("jvuser")
-                .withRootPassword("123OData!@#123")
+                .withRootPassword(password())
                 .withSecrets(group)
                 .withNewStorageAccount(generateRandomResourceName("stg", 15))
                 .withNewStorageAccount(generateRandomResourceName("stg3", 15))
@@ -964,7 +964,7 @@ public class VirtualMachineScaleSetOperationsTests extends ComputeManagementTest
         //
         // TODO: Renable the below code snippet: https://github.com/Azure/azure-libraries-for-net/issues/739
 
-        //        ServicePrincipal servicePrincipal = rbacManager
+        //        ServicePrincipal servicePrincipal = authorizationManager
         //                .servicePrincipals()
         //                .getById(virtualMachineScaleSet.systemAssignedManagedServiceIdentityPrincipalId());
         //
@@ -973,7 +973,7 @@ public class VirtualMachineScaleSetOperationsTests extends ComputeManagementTest
 
         // Ensure role assigned for resource group
         //
-        PagedIterable<RoleAssignment> rgRoleAssignments = rbacManager.roleAssignments().listByScope(resourceGroup.id());
+        PagedIterable<RoleAssignment> rgRoleAssignments = authorizationManager.roleAssignments().listByScope(resourceGroup.id());
         Assertions.assertNotNull(rgRoleAssignments);
         boolean found = false;
         for (RoleAssignment roleAssignment : rgRoleAssignments) {
@@ -1052,7 +1052,7 @@ public class VirtualMachineScaleSetOperationsTests extends ComputeManagementTest
         //
         // TODO: Renable the below code snippet: https://github.com/Azure/azure-libraries-for-net/issues/739
 
-        //        ServicePrincipal servicePrincipal = rbacManager
+        //        ServicePrincipal servicePrincipal = authorizationManager
         //                .servicePrincipals()
         //                .getById(virtualMachineScaleSet.systemAssignedManagedServiceIdentityPrincipalId());
         //
@@ -1061,7 +1061,7 @@ public class VirtualMachineScaleSetOperationsTests extends ComputeManagementTest
 
         // Ensure role assigned for resource group
         //
-        PagedIterable<RoleAssignment> rgRoleAssignments = rbacManager.roleAssignments().listByScope(resourceGroup.id());
+        PagedIterable<RoleAssignment> rgRoleAssignments = authorizationManager.roleAssignments().listByScope(resourceGroup.id());
         Assertions.assertNotNull(rgRoleAssignments);
         boolean found = false;
         for (RoleAssignment roleAssignment : rgRoleAssignments) {
@@ -1080,7 +1080,7 @@ public class VirtualMachineScaleSetOperationsTests extends ComputeManagementTest
         // Ensure role assigned for storage account
         //
         PagedIterable<RoleAssignment> stgRoleAssignments =
-            rbacManager.roleAssignments().listByScope(storageAccount.id());
+            authorizationManager.roleAssignments().listByScope(storageAccount.id());
         Assertions.assertNotNull(stgRoleAssignments);
         found = false;
         for (RoleAssignment roleAssignment : stgRoleAssignments) {

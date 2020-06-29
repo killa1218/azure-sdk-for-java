@@ -198,11 +198,11 @@ List<RecognizedForm> recognizedForms = recognizeFormPoller.getFinalResult();
 
 for (int i = 0; i < recognizedForms.size(); i++) {
     RecognizedForm form = recognizedForms.get(i);
-    System.out.printf("----------- Recognized Form %s%n-----------", i);
+    System.out.printf("----------- Recognized Form %d-----------%n", i);
     System.out.printf("Form type: %s%n", form.getFormType());
     form.getFields().forEach((label, formField) -> {
-        System.out.printf("Field %s has value %s with confidence score of %d.%n", label,
-            formField.getFieldValue(),
+        System.out.printf("Field %s has value %s with confidence score of %f.%n", label,
+            formField.getValueText().getText(),
             formField.getConfidence());
     });
     System.out.print("-----------------------------------");
@@ -221,9 +221,9 @@ List<FormPage> contentPageResults = recognizeContentPoller.getFinalResult();
 
 for (int i = 0; i < contentPageResults.size(); i++) {
     FormPage formPage = contentPageResults.get(i);
-    System.out.printf("----Recognizing content for page %s%n----", i);
+    System.out.printf("----Recognizing content for page %d----%n", i);
     // Table information
-    System.out.printf("Has width: %d and height: %d, measured with unit: %s.%n", formPage.getWidth(),
+    System.out.printf("Has width: %f and height: %f, measured with unit: %s.%n", formPage.getWidth(),
         formPage.getHeight(),
         formPage.getUnit());
     formPage.getTables().forEach(formTable -> {
@@ -251,7 +251,7 @@ List<RecognizedReceipt> receiptPageResults = syncPoller.getFinalResult();
 for (int i = 0; i < receiptPageResults.size(); i++) {
     RecognizedReceipt recognizedReceipt = receiptPageResults.get(i);
     Map<String, FormField> recognizedFields = recognizedReceipt.getRecognizedForm().getFields();
-    System.out.printf("----------- Recognized Receipt page %s -----------%n", i);
+    System.out.printf("----------- Recognized Receipt page %d -----------%n", i);
     FormField merchantNameField = recognizedFields.get("MerchantName");
     if (merchantNameField.getFieldValue().getType() == FieldValueType.STRING) {
         System.out.printf("Merchant Name: %s, confidence: %.2f%n",
@@ -280,7 +280,7 @@ for (int i = 0; i < receiptPageResults.size(); i++) {
                     }
                     if (key.equals("Quantity")) {
                         if (formField.getFieldValue().getType() == FieldValueType.INTEGER) {
-                            System.out.printf("Quantity: %s, confidence: %.2f%n",
+                            System.out.printf("Quantity: %d, confidence: %.2f%n",
                                 formField.getFieldValue().asInteger(), formField.getConfidence());
                         }
                     }
@@ -314,7 +314,7 @@ System.out.println("Recognized Fields:");
 // Since the given training documents are unlabeled, we still group them but they do not have a label.
 customFormModel.getSubmodels().forEach(customFormSubmodel -> {
     // Since the training data is unlabeled, we are unable to return the accuracy of this model
-    customFormSubmodel.getFieldMap().forEach((field, customFormModelField) ->
+    customFormSubmodel.getFields().forEach((field, customFormModelField) ->
         System.out.printf("Field: %s Field Label: %s%n",
             field, customFormModelField.getLabel()));
 });
@@ -327,7 +327,7 @@ Manage the custom models attached to your account.
 AtomicReference<String> modelId = new AtomicReference<>();
 // First, we see how many custom models we have, and what our limit is
 AccountProperties accountProperties = formTrainingClient.getAccountProperties();
-System.out.printf("The account has %s custom models, and we can have at most %s custom models",
+System.out.printf("The account has %d custom models, and we can have at most %d custom models",
     accountProperties.getCustomModelCount(), accountProperties.getCustomModelLimit());
 
 // Next, we get a paged list of all of our custom models
@@ -343,11 +343,11 @@ customModels.forEach(customFormModelInfo -> {
     System.out.printf("Updated on: %s%n", customModel.getCompletedOn());
     customModel.getSubmodels().forEach(customFormSubmodel -> {
         System.out.printf("Custom Model Form type: %s%n", customFormSubmodel.getFormType());
-        System.out.printf("Custom Model Accuracy: %d%n", customFormSubmodel.getAccuracy());
-        if (customFormSubmodel.getFieldMap() != null) {
-            customFormSubmodel.getFieldMap().forEach((fieldText, customFormModelField) -> {
+        System.out.printf("Custom Model Accuracy: %f%n", customFormSubmodel.getAccuracy());
+        if (customFormSubmodel.getFields() != null) {
+            customFormSubmodel.getFields().forEach((fieldText, customFormModelField) -> {
                 System.out.printf("Field Text: %s%n", fieldText);
-                System.out.printf("Field Accuracy: %d%n", customFormModelField.getAccuracy());
+                System.out.printf("Field Accuracy: %f%n", customFormModelField.getAccuracy());
             });
         }
     });
@@ -359,8 +359,8 @@ For more detailed examples, refer to [samples][sample_readme].
 
 ## Troubleshooting
 ### General
-Form Recognizer clients raises `ErrorResponseException` [exceptions][error_response_exception]. For example, if you try
-to provide an invalid file source URL an `ErrorResponseException` would be raised with an error indicating the failure cause.
+Form Recognizer clients raises `HttpResponseException` [exceptions][http_response_exception]. For example, if you try
+to provide an invalid file source URL an `HttpResponseException` would be raised with an error indicating the failure cause.
 In the following code snippet, the error is handled
 gracefully by catching the exception and display the additional information about the error.
 
@@ -368,7 +368,7 @@ gracefully by catching the exception and display the additional information abou
 ```java
 try {
     formRecognizerClient.beginRecognizeContentFromUrl("invalidSourceUrl");
-} catch (ErrorResponseException e) {
+} catch (HttpResponseException e) {
     System.out.println(e.getMessage());
 }
 ```
@@ -441,7 +441,7 @@ This project has adopted the [Microsoft Open Source Code of Conduct][coc]. For m
 [fr_labeling_tool]: https://docs.microsoft.com/azure/cognitive-services/form-recognizer/quickstarts/label-tool
 [fr_train_without_labels]: https://docs.microsoft.com/azure/cognitive-services/form-recognizer/overview#train-without-labels
 [fr_train_with_labels]: https://docs.microsoft.com/azure/cognitive-services/form-recognizer/overview#train-with-labels
-[error_response_exception]: https://github.com/Azure/azure-sdk-for-java/blob/master/sdk/formrecognizer/azure-ai-formrecognizer/src/main/java/com/azure/ai/formrecognizer/models/ErrorResponseException.java
+[http_response_exception]: https://github.com/Azure/azure-sdk-for-java/blob/master/sdk/core/azure-core/src/main/java/com/azure/core/exception/HttpResponseException.java
 [logging]: https://github.com/Azure/azure-sdk-for-java/wiki/Logging-with-Azure-SDK
 [package]: https://mvnrepository.com/artifact/com.azure/azure-ai-formrecognizer
 [performance_tuning]: https://github.com/Azure/azure-sdk-for-java/wiki/Performance-Tuning
