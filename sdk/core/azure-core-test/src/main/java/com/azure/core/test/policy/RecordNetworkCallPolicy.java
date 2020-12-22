@@ -24,10 +24,13 @@ import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.net.HttpURLConnection;
 import java.nio.charset.StandardCharsets;
-import java.util.Arrays;
+import java.util.Base64;
+import java.util.Collections;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.function.Function;
 import java.util.zip.GZIPInputStream;
 
 /**
@@ -49,6 +52,7 @@ public class RecordNetworkCallPolicy implements HttpPipelinePolicy {
 
     private final ClientLogger logger = new ClientLogger(RecordNetworkCallPolicy.class);
     private final RecordedData recordedData;
+    private final RecordingRedactor redactor;
 
     /**
      * Creates a policy that records network calls into {@code recordedData}.
@@ -56,8 +60,19 @@ public class RecordNetworkCallPolicy implements HttpPipelinePolicy {
      * @param recordedData The record to persist network calls into.
      */
     public RecordNetworkCallPolicy(RecordedData recordedData) {
+        this(recordedData, Collections.emptyList());
+    }
+
+    /**
+     * Creates a policy that records network calls into {@code recordedData} by redacting sensitive information by
+     * applying the provided redactor functions.
+     * @param recordedData The record to persist network calls into.
+     * @param redactors The custom redactor functions to apply to redact sensitive information from recorded data.
+     */
+    public RecordNetworkCallPolicy(RecordedData recordedData, List<Function<String, String>> redactors) {
         Objects.requireNonNull(recordedData, "'recordedData' cannot be null.");
         this.recordedData = recordedData;
+        redactor = new RecordingRedactor(redactors);
     }
 
     @Override
@@ -165,12 +180,12 @@ public class RecordNetworkCallPolicy implements HttpPipelinePolicy {
                     return responseData;
                 }
 
-                responseData.put(BODY, Arrays.toString(bytes));
+                responseData.put(BODY, Base64.getEncoder().encodeToString(bytes));
                 return responseData;
             });
         } else if (contentType.contains("json") || response.getHeaderValue(CONTENT_ENCODING) == null) {
             return response.getBodyAsString(StandardCharsets.UTF_8).switchIfEmpty(Mono.just("")).map(content -> {
-                responseData.put(BODY, new RecordingRedactor().redact(content));
+                responseData.put(BODY, redactor.redact(content));
                 return responseData;
             });
         } else {
@@ -193,7 +208,7 @@ public class RecordNetworkCallPolicy implements HttpPipelinePolicy {
                             bytesRead = gis.read(buffer, position, buffer.length);
                         }
 
-                        content = new String(output.toByteArray(), StandardCharsets.UTF_8);
+                        content = output.toString("UTF-8");
                     } catch (IOException e) {
                         throw logger.logExceptionAsWarning(Exceptions.propagate(e));
                     }

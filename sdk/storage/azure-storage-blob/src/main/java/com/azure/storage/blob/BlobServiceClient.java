@@ -10,13 +10,16 @@ import com.azure.core.http.rest.PagedIterable;
 import com.azure.core.http.rest.Response;
 import com.azure.core.http.rest.SimpleResponse;
 import com.azure.core.util.Context;
+import com.azure.storage.blob.models.TaggedBlobItem;
 import com.azure.storage.blob.models.BlobContainerItem;
 import com.azure.storage.blob.models.BlobServiceProperties;
 import com.azure.storage.blob.models.BlobServiceStatistics;
+import com.azure.storage.blob.options.FindBlobsOptions;
 import com.azure.storage.blob.models.ListBlobContainersOptions;
 import com.azure.storage.blob.models.PublicAccessType;
 import com.azure.storage.blob.models.StorageAccountInfo;
 import com.azure.storage.blob.models.UserDelegationKey;
+import com.azure.storage.blob.options.UndeleteBlobContainerOptions;
 import com.azure.storage.common.StorageSharedKeyCredential;
 import com.azure.storage.common.implementation.StorageImplUtils;
 import com.azure.storage.common.sas.AccountSasSignatureValues;
@@ -111,7 +114,8 @@ public final class BlobServiceClient {
      * {@codesnippet com.azure.storage.blob.BlobServiceClient.createBlobContainerWithResponse#String-Map-PublicAccessType-Context}
      *
      * @param containerName Name of the container to create
-     * @param metadata Metadata to associate with the container.
+     * @param metadata Metadata to associate with the container. If there is leading or trailing whitespace in any
+     * metadata key or value, it must be removed or encoded.
      * @param accessType Specifies how the data in this container is available to the public. See the
      * x-ms-blob-public-access header in the Azure Docs for more information. Pass null for no public access.
      * @param context Additional context that is passed through the Http pipeline during the service call.
@@ -149,7 +153,7 @@ public final class BlobServiceClient {
      * @return A response containing status code and HTTP headers
      */
     public Response<Void> deleteBlobContainerWithResponse(String containerName, Context context) {
-        return blobServiceAsyncClient.deleteBlobContainerWithResponse(containerName).block();
+        return blobServiceAsyncClient.deleteBlobContainerWithResponse(containerName, context).block();
     }
 
     /**
@@ -191,6 +195,40 @@ public final class BlobServiceClient {
      */
     public PagedIterable<BlobContainerItem> listBlobContainers(ListBlobContainersOptions options, Duration timeout) {
         return new PagedIterable<>(blobServiceAsyncClient.listBlobContainersWithOptionalTimeout(options, timeout));
+    }
+
+    /**
+     * Returns a lazy loaded list of blobs in this account whose tags match the query expression. The returned
+     * {@link PagedIterable} can be consumed while new items are automatically retrieved as needed. For more
+     * information, including information on the query syntax, see the <a href="https://docs.microsoft.com/en-us/rest/api/storageservices/find-blobs-by-tags">Azure Docs</a>.
+     *
+     * <p><strong>Code Samples</strong></p>
+     *
+     * {@codesnippet com.azure.storage.blob.BlobServiceClient.findBlobsByTag#String}
+     *
+     * @param query Filters the results to return only blobs whose tags match the specified expression.
+     * @return The list of blobs.
+     */
+    public PagedIterable<TaggedBlobItem> findBlobsByTags(String query) {
+        return this.findBlobsByTags(new FindBlobsOptions(query), null, Context.NONE);
+    }
+
+    /**
+     * Returns a lazy loaded list of blobs in this account whose tags match the query expression. The returned
+     * {@link PagedIterable} can be consumed while new items are automatically retrieved as needed. For more
+     * information, including information on the query syntax, see the <a href="https://docs.microsoft.com/en-us/rest/api/storageservices/find-blobs-by-tags">Azure Docs</a>.
+     *
+     * <p><strong>Code Samples</strong></p>
+     *
+     * {@codesnippet com.azure.storage.blob.BlobServiceClient.findBlobsByTag#FindBlobsOptions-Duration}
+     *
+     * @param options {@link FindBlobsOptions}
+     * @param timeout An optional timeout value beyond which a {@link RuntimeException} will be raised.
+     * @param context Additional context that is passed through the Http pipeline during the service call.
+     * @return The list of blobs.
+     */
+    public PagedIterable<TaggedBlobItem> findBlobsByTags(FindBlobsOptions options, Duration timeout, Context context) {
+        return new PagedIterable<>(blobServiceAsyncClient.findBlobsByTags(options, timeout, context));
     }
 
     /**
@@ -381,7 +419,7 @@ public final class BlobServiceClient {
 
     /**
      * Generates an account SAS for the Azure Storage account using the specified {@link AccountSasSignatureValues}.
-     * Note : The client must be authenticated via {@link StorageSharedKeyCredential}
+     * <p>Note : The client must be authenticated via {@link StorageSharedKeyCredential}
      * <p>See {@link AccountSasSignatureValues} for more information on how to construct an account SAS.</p>
      *
      * <p><strong>Generating an account SAS</strong></p>
@@ -391,9 +429,81 @@ public final class BlobServiceClient {
      *
      * @param accountSasSignatureValues {@link AccountSasSignatureValues}
      *
-     * @return A {@code String} representing all SAS query parameters.
+     * @return A {@code String} representing the SAS query parameters.
      */
     public String generateAccountSas(AccountSasSignatureValues accountSasSignatureValues) {
         return this.blobServiceAsyncClient.generateAccountSas(accountSasSignatureValues);
+    }
+
+    /**
+     * Generates an account SAS for the Azure Storage account using the specified {@link AccountSasSignatureValues}.
+     * <p>Note : The client must be authenticated via {@link StorageSharedKeyCredential}
+     * <p>See {@link AccountSasSignatureValues} for more information on how to construct an account SAS.</p>
+     *
+     * <p><strong>Generating an account SAS</strong></p>
+     * <p>The snippet below generates an AccountSasSignatureValues object that lasts for two days and gives the user
+     * read and list access to blob  and file shares.</p>
+     * {@codesnippet com.azure.storage.blob.BlobServiceClient.generateAccountSas#AccountSasSignatureValues-Context}
+     *
+     * @param accountSasSignatureValues {@link AccountSasSignatureValues}
+     * @param context Additional context that is passed through the code when generating a SAS.
+     *
+     * @return A {@code String} representing the SAS query parameters.
+     */
+    public String generateAccountSas(AccountSasSignatureValues accountSasSignatureValues, Context context) {
+        return this.blobServiceAsyncClient.generateAccountSas(accountSasSignatureValues, context);
+    }
+
+    /**
+     * Restores a previously deleted container.
+     * If the container associated with provided <code>deletedContainerName</code>
+     * already exists, this call will result in a 409 (conflict).
+     * This API is only functional if Container Soft Delete is enabled
+     * for the storage account associated with the container.
+     * For more information, see the
+     * <a href="TBD">Azure Docs</a>. TODO (kasobol-msft) add link to REST API docs
+     *
+     * <p><strong>Code Samples</strong></p>
+     *
+     * {@codesnippet com.azure.storage.blob.BlobServiceClient.undeleteBlobContainer#String-String}
+     *
+     * @param deletedContainerName The name of the previously deleted container.
+     * @param deletedContainerVersion The version of the previously deleted container.
+     * @return The {@link BlobContainerClient} used to interact with the restored container.
+     */
+    public BlobContainerClient undeleteBlobContainer(String deletedContainerName, String deletedContainerVersion) {
+        return this.undeleteBlobContainerWithResponse(
+            new UndeleteBlobContainerOptions(deletedContainerName, deletedContainerVersion), null,
+            Context.NONE).getValue();
+    }
+
+    /**
+     * Restores a previously deleted container. The restored container
+     * will be renamed to the <code>destinationContainerName</code> if provided in <code>options</code>.
+     * Otherwise <code>deletedContainerName</code> is used as destination container name.
+     * If the container associated with provided <code>destinationContainerName</code>
+     * already exists, this call will result in a 409 (conflict).
+     * This API is only functional if Container Soft Delete is enabled
+     * for the storage account associated with the container.
+     * For more information, see the
+     * <a href="TBD">Azure Docs</a>. TODO (kasobol-msft) add link to REST API docs
+     *
+     * <p><strong>Code Samples</strong></p>
+     *
+     * {@codesnippet com.azure.storage.blob.BlobServiceClient.undeleteBlobContainerWithResponse#UndeleteBlobContainerOptions-Duration-Context}
+     *
+     * @param options {@link UndeleteBlobContainerOptions}.
+     * @param timeout An optional timeout value beyond which a {@link RuntimeException} will be raised.
+     * @param context Additional context that is passed through the Http pipeline during the service call.
+     * @return A {@link Response} whose {@link Response#getValue() value} contains the {@link BlobContainerClient} used
+     * to interact with the restored container.
+     */
+    public Response<BlobContainerClient> undeleteBlobContainerWithResponse(
+        UndeleteBlobContainerOptions options, Duration timeout, Context context) {
+        Mono<Response<BlobContainerClient>> response =
+            this.blobServiceAsyncClient.undeleteBlobContainerWithResponse(options, context)
+            .map(r -> new SimpleResponse<>(r, getBlobContainerClient(r.getValue().getBlobContainerName())));
+
+        return StorageImplUtils.blockWithOptionalTimeout(response, timeout);
     }
 }

@@ -5,9 +5,9 @@ package com.azure.messaging.servicebus.implementation;
 
 import com.azure.core.amqp.AmqpEndpointState;
 import com.azure.core.amqp.AmqpRetryPolicy;
-import com.azure.core.amqp.exception.AmqpErrorContext;
 import com.azure.core.amqp.implementation.AmqpReceiveLink;
 import com.azure.core.util.logging.ClientLogger;
+import com.azure.messaging.servicebus.models.ServiceBusReceiveMode;
 import org.apache.qpid.proton.amqp.transport.DeliveryState;
 import org.apache.qpid.proton.message.Message;
 import org.reactivestreams.Subscription;
@@ -42,20 +42,24 @@ public class ServiceBusReceiveLinkProcessor extends FluxProcessor<ServiceBusRece
     implements Subscription {
     private final ClientLogger logger = new ClientLogger(ServiceBusReceiveLinkProcessor.class);
     private final Object lock = new Object();
+    private final Object queueLock = new Object();
     private final AtomicBoolean isTerminated = new AtomicBoolean();
     private final AtomicInteger retryAttempts = new AtomicInteger();
-    private final Deque<Message> messageQueue = new ConcurrentLinkedDeque<>();
-    private final AtomicBoolean hasFirstLink = new AtomicBoolean();
-    private final AtomicBoolean linkCreditsAdded = new AtomicBoolean();
     private final AtomicReference<String> linkName = new AtomicReference<>();
+
+    // Queue containing all the prefetched messages.
+    private final Deque<Message> messageQueue = new ConcurrentLinkedDeque<>();
+    // size() on Deque is O(n) operation, so we use an integer to keep track. All reads and writes to this are gated by
+    // the `queueLock`.
+    private final AtomicInteger pendingMessages = new AtomicInteger();
+    private final int minimumNumberOfMessages;
+    private final int prefetch;
 
     private final AtomicReference<CoreSubscriber<? super Message>> downstream = new AtomicReference<>();
     private final AtomicInteger wip = new AtomicInteger();
 
-    private final int prefetch;
     private final AmqpRetryPolicy retryPolicy;
-    private final Disposable parentConnection;
-    private final AmqpErrorContext errorContext;
+    private final ServiceBusReceiveMode receiveMode;
 
     private volatile Throwable lastError;
     private volatile boolean isCancelled;
@@ -78,38 +82,29 @@ public class ServiceBusReceiveLinkProcessor extends FluxProcessor<ServiceBusRece
      *
      * @param prefetch The number if messages to initially fetch.
      * @param retryPolicy Retry policy to apply when fetching a new AMQP channel.
-     * @param parentConnection Represents the parent connection.
      *
      * @throws NullPointerException if {@code retryPolicy} is null.
      * @throws IllegalArgumentException if {@code prefetch} is less than 0.
      */
-    public ServiceBusReceiveLinkProcessor(int prefetch, AmqpRetryPolicy retryPolicy,
-        Disposable parentConnection, AmqpErrorContext errorContext) {
+    public ServiceBusReceiveLinkProcessor(int prefetch, AmqpRetryPolicy retryPolicy, ServiceBusReceiveMode
+        receiveMode) {
         this.retryPolicy = Objects.requireNonNull(retryPolicy, "'retryPolicy' cannot be null.");
-        this.parentConnection = Objects.requireNonNull(parentConnection, "'parentConnection' cannot be null.");
-        this.errorContext = errorContext;
+        this.receiveMode = Objects.requireNonNull(receiveMode, "'receiveMode' cannot be null.");
 
-        if (prefetch <= 0) {
+        if (prefetch < 0) {
             throw logger.logExceptionAsError(
-                new IllegalArgumentException("'prefetch' cannot be less than or equal to 0."));
+                new IllegalArgumentException("'prefetch' cannot be less than 0."));
         }
 
         this.prefetch = prefetch;
+
+        // When the queue has this number of messages left, it's time to add more credits to refill the prefetch queue.
+        this.minimumNumberOfMessages = Math.floorDiv(prefetch, 3);
     }
 
     public String getLinkName() {
         return linkName.get();
     }
-
-    /**
-     * Gets the error context associated with this link.
-     *
-     * @return the error context associated with this link.
-     */
-    public AmqpErrorContext getErrorContext() {
-        return errorContext;
-    }
-
 
     public Mono<Void> updateDisposition(String lockToken, DeliveryState deliveryState) {
         if (isDisposed()) {
@@ -123,7 +118,15 @@ public class ServiceBusReceiveLinkProcessor extends FluxProcessor<ServiceBusRece
                 "lockToken[%s]. state[%s]. Cannot update disposition with no link.", lockToken, deliveryState)));
         }
 
-        return link.updateDisposition(lockToken, deliveryState);
+        return link.updateDisposition(lockToken, deliveryState)
+            .then(Mono.fromRunnable(() -> {
+                // Check if we should add more credits.
+                synchronized (queueLock) {
+                    pendingMessages.decrementAndGet();
+                }
+
+                checkAndAddCredits(link);
+            }));
     }
 
     /**
@@ -196,17 +199,15 @@ public class ServiceBusReceiveLinkProcessor extends FluxProcessor<ServiceBusRece
             oldSubscription = currentLinkSubscriptions;
 
             currentLink = next;
-
-            if (!hasFirstLink.getAndSet(true)) {
-                linkCreditsAdded.set(true);
-                next.addCredits(prefetch);
-            }
-
-            next.setEmptyCreditListener(() -> getCreditsToAdd());
+            next.setEmptyCreditListener(() -> 0);
 
             currentLinkSubscriptions = Disposables.composite(
                 next.receive().publishOn(Schedulers.boundedElastic()).subscribe(message -> {
-                    messageQueue.add(message);
+                    synchronized (queueLock) {
+                        messageQueue.add(message);
+                        pendingMessages.incrementAndGet();
+                    }
+
                     drain();
                 }),
                 next.getEndpointStates().subscribe(
@@ -221,9 +222,11 @@ public class ServiceBusReceiveLinkProcessor extends FluxProcessor<ServiceBusRece
                         onError(error);
                     },
                     () -> {
-                        if (parentConnection.isDisposed() || isTerminated()
-                            || upstream == Operators.cancelledSubscription()) {
-                            logger.info("Terminal state reached. Disposing of link processor.");
+                        if (isTerminated()) {
+                            logger.info("Processor is terminated. Disposing of link processor.");
+                            dispose();
+                        } else if (upstream == Operators.cancelledSubscription()) {
+                            logger.info("Upstream has completed. Disposing of link processor.");
                             dispose();
                         } else {
                             logger.info("Receive link endpoint states are closed. Requesting another.");
@@ -238,6 +241,8 @@ public class ServiceBusReceiveLinkProcessor extends FluxProcessor<ServiceBusRece
                         }
                     }));
         }
+
+        checkAndAddCredits(next);
 
         if (oldChannel != null) {
             oldChannel.dispose();
@@ -313,17 +318,13 @@ public class ServiceBusReceiveLinkProcessor extends FluxProcessor<ServiceBusRece
         final String linkName = link != null ? link.getLinkName() : "n/a";
         final String entityPath = link != null ? link.getEntityPath() : "n/a";
 
-        if (retryInterval != null && !parentConnection.isDisposed() && upstream != Operators.cancelledSubscription()) {
+        if (retryInterval != null && upstream != Operators.cancelledSubscription()) {
             logger.warning("linkName[{}] entityPath[{}]. Transient error occurred. Attempt: {}. Retrying after {} ms.",
                 linkName, entityPath, attempt, retryInterval.toMillis(), throwable);
 
             retrySubscription = Mono.delay(retryInterval).subscribe(i -> requestUpstream());
 
             return;
-        }
-
-        if (parentConnection.isDisposed()) {
-            logger.info("Parent connection is disposed. Not reopening on error.");
         }
 
         logger.warning("linkName[{}] entityPath[{}]. Non-retryable error occurred in AMQP receive link.",
@@ -371,12 +372,11 @@ public class ServiceBusReceiveLinkProcessor extends FluxProcessor<ServiceBusRece
         Operators.addCap(REQUESTED, this, request);
 
         final AmqpReceiveLink link = currentLink;
-        if (link != null && !linkCreditsAdded.getAndSet(true)) {
-            int credits = getCreditsToAdd();
-            logger.info("Link credits not yet added. Adding: {}", credits);
-            link.addCredits(credits);
+        if (link == null) {
+            return;
         }
 
+        checkAndAddCredits(link);
         drain();
     }
 
@@ -469,19 +469,33 @@ public class ServiceBusReceiveLinkProcessor extends FluxProcessor<ServiceBusRece
                     break;
                 }
 
-                Message message = messageQueue.poll();
+                final Message message = messageQueue.poll();
                 if (message == null) {
                     break;
                 }
 
                 if (isCancelled) {
                     Operators.onDiscard(message, subscriber.currentContext());
-                    Operators.onDiscardQueueWithClear(messageQueue, subscriber.currentContext(), null);
+
+                    synchronized (queueLock) {
+                        Operators.onDiscardQueueWithClear(messageQueue, subscriber.currentContext(), null);
+                        pendingMessages.set(0);
+                    }
+
                     return;
                 }
 
                 try {
                     subscriber.onNext(message);
+
+                    // These don't have to be settled because they're automatically settled by the link, so we
+                    // decrement the count.
+                    if (receiveMode != ServiceBusReceiveMode.PEEK_LOCK) {
+                        pendingMessages.decrementAndGet();
+                    }
+                    if (prefetch > 0) { // re-fill messageQueue if there is prefetch configured.
+                        checkAndAddCredits(currentLink);
+                    }
                 } catch (Exception e) {
                     logger.error("Exception occurred while handling downstream onNext operation.", e);
                     throw logger.logExceptionAsError(Exceptions.propagate(
@@ -515,22 +529,77 @@ public class ServiceBusReceiveLinkProcessor extends FluxProcessor<ServiceBusRece
             currentLink.dispose();
         }
 
-        messageQueue.clear();
+        synchronized (queueLock) {
+            messageQueue.clear();
+            pendingMessages.set(0);
+        }
+
         return true;
     }
 
-    private int getCreditsToAdd() {
+    private void checkAndAddCredits(AmqpReceiveLink link) {
+        if (link == null) {
+            return;
+        }
+
+        synchronized (lock) {
+            final int linkCredits = link.getCredits();
+            final int credits = getCreditsToAdd(linkCredits);
+            logger.info("Link credits='{}', Link credits to add: '{}'", linkCredits, credits);
+
+            if (credits > 0) {
+                link.addCredits(credits);
+            }
+        }
+    }
+
+    private int getCreditsToAdd(int linkCredits) {
         final CoreSubscriber<? super Message> subscriber = downstream.get();
         final long r = requested;
+        final boolean hasBackpressure = r != Long.MAX_VALUE;
+
         if (subscriber == null || r == 0) {
             logger.info("Not adding credits. No downstream subscribers or items requested.");
-            linkCreditsAdded.set(false);
             return 0;
         }
 
-        linkCreditsAdded.set(true);
+        final int creditsToAdd;
+        final int expectedTotalCredit;
+        if (prefetch == 0) {
+            if (r <= Integer.MAX_VALUE) {
+                expectedTotalCredit = (int) r;
+            } else {
+                //This won't really happen in reality.
+                //For async client, receiveMessages() calls "return receiveMessagesNoBackPressure().limitRate(1, 0);".
+                //So it will request one by one from this link processor, even though the user's request has no
+                //back pressure.
+                //For sync client, the sync subscriber has back pressure.
+                //The request count uses the the argument of method receiveMessages(int maxMessages).
+                //It's at most Integer.MAX_VALUE.
+                expectedTotalCredit = Integer.MAX_VALUE;
+            }
+        } else {
+            expectedTotalCredit = prefetch;
+        }
+        logger.info("linkCredits: '{}', expectedTotalCredit: '{}'", linkCredits, expectedTotalCredit);
 
-        // If there is no back pressure, always add 1. Otherwise, add whatever is requested.
-        return r == Long.MAX_VALUE ? 1 : Long.valueOf(r).intValue();
+        synchronized (queueLock) {
+            final int queuedMessages = pendingMessages.get();
+            final int pending = queuedMessages + linkCredits;
+
+            if (hasBackpressure) {
+                creditsToAdd = Math.max(expectedTotalCredit - pending, 0);
+            } else {
+                // If the queue has less than 1/3 of the prefetch, then add the difference to keep the queue full.
+                creditsToAdd = minimumNumberOfMessages >= queuedMessages
+                    ? Math.max(expectedTotalCredit - pending, 0)
+                    : 0;
+            }
+            logger.info("prefetch: '{}', requested: '{}', linkCredits: '{}', expectedTotalCredit: '{}', queuedMessages:"
+                    + "'{}', creditsToAdd: '{}', messageQueue.size(): '{}'", getPrefetch(), r, linkCredits,
+                expectedTotalCredit, queuedMessages, creditsToAdd, messageQueue.size());
+        }
+
+        return creditsToAdd;
     }
 }

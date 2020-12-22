@@ -3,7 +3,8 @@
 
 package com.azure.ai.formrecognizer.models;
 
-import com.azure.core.annotation.Immutable;
+import com.azure.ai.formrecognizer.implementation.CustomFormSubmodelHelper;
+import com.azure.ai.formrecognizer.implementation.FormPageHelper;
 
 import java.util.Collections;
 import java.util.List;
@@ -11,7 +12,6 @@ import java.util.List;
 /**
  * The FormPage model.
  */
-@Immutable
 public final class FormPage {
 
     /*
@@ -20,7 +20,7 @@ public final class FormPage {
     private final float height;
 
     /*
-     * When includeTextContent is set to true, a list of recognized text lines.
+     * When includeFieldElements is set to true, a list of recognized text lines.
      */
     private final List<FormLine> lines;
 
@@ -28,6 +28,11 @@ public final class FormPage {
      * List of data tables extracted from the page.
      */
     private final List<FormTable> tables;
+
+    /*
+     * List of selection marks extracted from the page.
+     */
+    private List<FormSelectionMark> selectionMarks;
 
     /*
      * The general orientation of the text in clockwise direction, measured in
@@ -51,6 +56,15 @@ public final class FormPage {
      */
     private final Integer pageNumber;
 
+    static {
+        FormPageHelper.setAccessor(new FormPageHelper.FormPageAccessor() {
+            @Override
+            public void setSelectionMarks(FormPage formPage, List<FormSelectionMark> selectionMarks) {
+                formPage.setSelectionMarks(selectionMarks);
+            }
+        });
+    }
+
     /**
      * Constructs a FormPage object.
      *
@@ -58,14 +72,14 @@ public final class FormPage {
      * @param textAngle The general orientation of the text in clockwise direction.
      * @param unit The unit used by the width, height and boundingBox properties.
      * @param width The width of the image/PDF in pixels/inches, respectively.
-     * @param lines When includeTextContent is set to true, a list of recognized text lines.
+     * @param lines When includeFieldElements is set to true, a list of recognized text lines.
      * @param tables List of data tables extracted from the page.
      * @param pageNumber the 1-based page number in the input document.
      */
     public FormPage(final float height, final float textAngle, final LengthUnit unit,
-        final float width, final List<FormLine> lines, final List<FormTable> tables, final Integer pageNumber) {
+        final float width, final List<FormLine> lines, final List<FormTable> tables, final int pageNumber) {
         this.height = height;
-        this.textAngle = textAngle;
+        this.textAngle = textAngle > 180 ? textAngle - 360 : textAngle;
         this.unit = unit;
         this.width = width;
         this.lines = lines == null ? null : Collections.unmodifiableList(lines);
@@ -84,7 +98,7 @@ public final class FormPage {
     }
 
     /**
-     * Get the lines property: When includeTextContent is set to true, a list
+     * Get the lines property: When includeFieldElements is set to true, a list
      * of recognized text lines.
      *
      * @return the unmodifiable list of recognized lines.
@@ -139,6 +153,25 @@ public final class FormPage {
      */
     public Integer getPageNumber() {
         return this.pageNumber;
+    }
+
+    /**
+     * Get the selection marks in the input document.
+     *
+     * @return the selection marks.
+     */
+    public List<FormSelectionMark> getSelectionMarks() {
+        return Collections.unmodifiableList(this.selectionMarks);
+    }
+
+    /**
+     * The private setter to set the selectionMarks property
+     * via {@link CustomFormSubmodelHelper.CustomFormSubmodelAccessor}.
+     *
+     * @param selectionMarks The selection marks in the input document.
+     */
+    private void setSelectionMarks(List<FormSelectionMark> selectionMarks) {
+        this.selectionMarks = selectionMarks;
     }
 }
 

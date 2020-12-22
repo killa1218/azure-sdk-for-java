@@ -19,6 +19,7 @@ import com.azure.core.http.policy.RetryPolicy;
 import com.azure.core.http.policy.RetryStrategy;
 import com.azure.core.http.policy.UserAgentPolicy;
 import com.azure.core.test.TestBase;
+import com.azure.core.test.TestMode;
 import com.azure.core.util.Configuration;
 import com.azure.core.util.ServiceVersion;
 import com.azure.identity.ClientSecretCredentialBuilder;
@@ -33,7 +34,12 @@ import java.security.spec.KeySpec;
 import java.security.spec.RSAPrivateCrtKeySpec;
 import java.security.spec.RSAPublicKeySpec;
 import java.time.Duration;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+import java.util.UUID;
 import java.util.function.Consumer;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -80,7 +86,7 @@ public abstract class CryptographyClientTestBase extends TestBase {
         HttpPolicyProviders.addAfterRetryPolicies(policies);
         policies.add(new HttpLoggingPolicy(new HttpLogOptions().setLogLevel(HttpLogDetailLevel.BODY_AND_HEADERS)));
 
-        if (!interceptorManager.isPlaybackMode()) {
+        if (getTestMode() == TestMode.RECORD) {
             policies.add(interceptorManager.getRecordPolicy());
         }
 
