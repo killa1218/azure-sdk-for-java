@@ -36,12 +36,12 @@
 
     <snapshotRepository>
       <id>azuresdkmaven</id>
-      <url>bs://azuresdkmaven.blob.core.windows.net/snapshot/m2</url>
+      <url>bs://azuresdkmaven.blob.core.windows.net/maven2</url>
     </snapshotRepository>
 
     <repository>
       <id>azuresdkmaven</id>
-      <url>bs://azuresdkmaven.blob.core.windows.net/snapshot/m2</url>
+      <url>bs://azuresdkmaven.blob.core.windows.net/maven2</url>
     </repository>
   </distributionManagement>
 
