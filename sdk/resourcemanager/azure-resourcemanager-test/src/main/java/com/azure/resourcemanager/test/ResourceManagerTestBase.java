@@ -23,6 +23,9 @@ import com.azure.identity.ClientSecretCredentialBuilder;
 import com.azure.resourcemanager.test.policy.RequestTracePolicy;
 import com.azure.resourcemanager.test.policy.TextReplacementPolicy;
 import com.azure.resourcemanager.test.utils.AuthFile;
+import com.azure.resourcemanager.test.utils.RandomString;
+
+import org.junit.jupiter.api.extension.ExtendWith;
 
 import java.io.File;
 import java.io.IOException;
@@ -49,6 +52,7 @@ import java.util.Map;
 /**
  * Test base for resource manager SDK.
  */
+@ExtendWith(ResourceManagerTestWatcher.class)
 public abstract class ResourceManagerTestBase extends TestBase {
     private static final String ZERO_SUBSCRIPTION = "00000000-0000-0000-0000-000000000000";
     private static final String ZERO_TENANT = "00000000-0000-0000-0000-000000000000";
@@ -94,6 +98,8 @@ public abstract class ResourceManagerTestBase extends TestBase {
     protected String generateRandomUuid() {
         return testResourceNamer.randomUuid();
     }
+
+    public final String fileName = new RandomString(64).nextString();
 
     /**
      * @return random password
@@ -166,7 +172,7 @@ public abstract class ResourceManagerTestBase extends TestBase {
             List<HttpPipelinePolicy> policies = new ArrayList<>();
             policies.add(new TextReplacementPolicy(interceptorManager.getRecordedData(), textReplacementRules));
             policies.add(new CookiePolicy());
-            policies.add(new RequestTracePolicy());
+            policies.add(new RequestTracePolicy(this.fileName));
             httpPipeline = buildHttpPipeline(
                 null,
                 testProfile,

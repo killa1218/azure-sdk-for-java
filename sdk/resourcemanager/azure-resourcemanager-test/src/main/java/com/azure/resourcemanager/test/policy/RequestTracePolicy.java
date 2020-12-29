@@ -12,10 +12,15 @@ import com.azure.core.http.HttpResponse;
 import com.azure.core.http.policy.HttpPipelinePolicy;
 import com.azure.core.util.CoreUtils;
 import com.azure.core.util.logging.ClientLogger;
+import com.azure.resourcemanager.test.Constants;
+
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
+import java.io.BufferedWriter;
 import java.io.ByteArrayOutputStream;
+import java.io.File;
+import java.io.FileWriter;
 import java.io.IOException;
 import java.io.UnsupportedEncodingException;
 import java.nio.ByteBuffer;
@@ -25,15 +30,18 @@ import java.nio.channels.WritableByteChannel;
 public class RequestTracePolicy implements HttpPipelinePolicy {
 
     private final ClientLogger logger = new ClientLogger(RequestTracePolicy.class);
+    private String fileName;
+
+    public RequestTracePolicy(String fileName) {
+        super();
+        this.fileName = fileName;
+    }
 
     @Override
     public Mono<HttpResponse> process(HttpPipelineCallContext context, HttpPipelineNextPolicy next) {
         HttpRequest request = context.getHttpRequest();
 
         StringBuilder traceBuilder = new StringBuilder();
-        traceBuilder.append("method: ").append(request.getHttpMethod()).append(System.lineSeparator());
-        traceBuilder.append("url: ").append(request.getUrl()).append(System.lineSeparator());
-        traceBuilder.append("headers: ").append(request.getHeaders()).append(System.lineSeparator());
 
         String contentType = request.getHeaders().getValue("Content-Type");
 //        long contentLength = getContentLength(request.getHeaders());
@@ -46,18 +54,29 @@ public class RequestTracePolicy implements HttpPipelinePolicy {
             Flux<ByteBuffer> body = request.getBody()
                 .flatMap(byteBuffer -> writeBufferToBodyStream(bodyContentChannel, byteBuffer))
                 .doFinally(ignored -> {
-                    traceBuilder.append("body: ")
-                        .append(convertStreamToString(outputStream))
-                        .append(System.lineSeparator());
+                    traceBuilder.append("\u2502").append(convertStreamToString(outputStream));
 
-                    System.out.println(traceBuilder.toString());
+                    try {
+                        File dir = new File(Constants.dataDir);
+
+                        if (!dir.exists()) {
+                            dir.mkdirs();
+                        }
+
+                        BufferedWriter bw = new BufferedWriter(new FileWriter(
+                            new File(String.format("%s/%s", Constants.dataDir, fileName)), true));
+
+                        bw.append(traceBuilder.toString());
+
+                        bw.close();
+                    } catch (IOException e) {
+                        e.printStackTrace();
+                    }
                 });
             request.setBody(body);
 
             // drain the request body, only do this in PLAYBACK, delete this in LIVE/RECORD
             body.subscribe();
-        } else {
-            System.out.println(traceBuilder.toString());
         }
 
         return next.process();
