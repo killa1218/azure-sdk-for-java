@@ -54,7 +54,7 @@ public class RequestTracePolicy implements HttpPipelinePolicy {
             Flux<ByteBuffer> body = request.getBody()
                 .flatMap(byteBuffer -> writeBufferToBodyStream(bodyContentChannel, byteBuffer))
                 .doFinally(ignored -> {
-                    traceBuilder.append("\u2502").append(convertStreamToString(outputStream));
+                    traceBuilder.append("|plsep|").append(convertStreamToString(outputStream));
 
                     try {
                         File dir = new File(Constants.dataDir);

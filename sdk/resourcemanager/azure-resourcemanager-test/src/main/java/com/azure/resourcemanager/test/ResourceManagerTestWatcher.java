@@ -45,7 +45,7 @@ public class ResourceManagerTestWatcher implements TestWatcher {
             BufferedWriter bw = new BufferedWriter(new FileWriter(
                 new File(String.format("%s/%s", Constants.dataDir, fileName)), true));
 
-            bw.append(String.format("\u2506%s.%s%s", className, methodName, System.lineSeparator()));
+            bw.append(String.format("|cmsep|%s.%s%s", className, methodName, System.lineSeparator()));
 
             bw.close();
         } catch (IOException e) {
